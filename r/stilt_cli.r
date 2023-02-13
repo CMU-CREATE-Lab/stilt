@@ -18,6 +18,9 @@
 #     ymx=40.95 \
 #     yres=0.01
 
+Rprof("/tmp/Rprof.out")
+
+
 # Extract kv pairs for supplied arguments -------------------------------------
 arg_strings <- commandArgs(trailingOnly = T)
 args <- list()

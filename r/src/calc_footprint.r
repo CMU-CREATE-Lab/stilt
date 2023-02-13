@@ -35,6 +35,7 @@
 #' @import dplyr, proj4, raster
 #' @export
 
+
 # Gaussian kernel weighting calculation
 make_gauss_kernel <- function (rs, sigma, projection) {
   # Modified from raster:::.Gauss.weight()
@@ -73,12 +74,18 @@ calc_footprint <- function(p, output = NULL, r_run_time,
                            projection = '+proj=longlat',
                            smooth_factor = 1, time_integrate = F,
                            xmn, xmx, xres, ymn, ymx, yres = xres) {
+
+
+  begin_time = Sys.time();
+
   require(dplyr)
   require(raster)
   
   np <- length(unique(p$indx))
   time_sign <- sign(median(p$time))
   is_longlat <- grepl('+proj=longlat', projection, fixed = T)
+
+  message("<<<  Loaded R libraries at time: ", Sys.time() - begin_time)
   
   # Determine longitude wrapping behavior for grid extents containing anti
   # meridian, including partial wraps (e.g. 20deg from 170:-170) and global
@@ -95,6 +102,8 @@ calc_footprint <- function(p, output = NULL, r_run_time,
       xmx <- wrap_longitude_antimeridian(xmx)
     }
   }
+
+  message("<<<  Determine longitude wrapping behavior at time ", Sys.time() - begin_time)
   
   # Interpolate particle locations during first 100 minutes of simulation if
   # median distance traveled per time step is larger than grid resolution
@@ -141,12 +150,16 @@ calc_footprint <- function(p, output = NULL, r_run_time,
     mi <- aptime > 20 & aptime <= 100
     p$foot[mi] <- p$foot[mi] / (sum(p$foot[mi], na.rm = T) / foot_20_100_sum)
   }
+
+  message("<<<  Interpolate particle location at time: ", Sys.time() - begin_time)
   
   # Preserve time relative to individual particle release as rtime
   p <- p %>%
     group_by(indx) %>%
     mutate(rtime = time - (time_sign) * min(abs(time))) %>%
     ungroup()
+
+  message("<<<  Preserve time relative to individual particle release as rtime at time: ", Sys.time() - begin_time)
   
   # Translate x, y coordinates into desired map projection
   if (!is_longlat) {
@@ -158,10 +171,14 @@ calc_footprint <- function(p, output = NULL, r_run_time,
     ymn <- min(grid_lims$y)
     ymx <- max(grid_lims$y)
   }
+
+  message("<<<  Translate x, y coordinates into desired map projection at time: ", Sys.time() - begin_time)
   
   # Set footprint grid breaks using lower left corner of each cell
   glong <- head(seq(xmn, xmx, by = xres), -1)
   glati <- head(seq(ymn, ymx, by = yres), -1)
+
+  message("<<<  Set footprint grid breaks using lower left corner of each cell at time: ", Sys.time() - begin_time)
   
   # Gaussian kernel bandwidth scaling by summed variances, elapsed time, and
   # average latitude of the ensemble
@@ -177,9 +194,13 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   grid_conv <- if (is_longlat) cos(kernel$lati * pi/180) else 1
   w <- smooth_factor * 0.06 * di * ti / grid_conv
   
+  message("<<<  Gaussian kernel bandwidth scaling at time: ", Sys.time() - begin_time)
+
   # Determine maximum kernel size
   xyres <- c(xres, yres)
   max_k <- make_gauss_kernel(xyres, max(w), projection)
+
+  message("<<<  Determined maximum kernel size at time: ", Sys.time() - begin_time)
   
   # Expand grid extent using maximum kernel size
   xbuf <- ncol(max_k)
@@ -189,6 +210,8 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   
   glong_buf <- seq(xmn - (xbuf*xres), xmx + ((xbuf - 1)*xres), by = xres)
   glati_buf <- seq(ymn - (ybuf*yres), ymx + ((ybuf - 1)*yres), by = yres)
+
+  message("<<<  Expand grid extent using maximum kernel size at time: ", Sys.time() - begin_time)
   
   # Remove zero influence particles and positions outside of domain
   p <- p %>%
@@ -196,6 +219,8 @@ calc_footprint <- function(p, output = NULL, r_run_time,
                   long >= (xmn - xbufh*xres), long < (xmx + xbufh*xres),
                   lati >= (ymn - ybufh*yres), lati < (ymx + ybufh*yres))
   if (nrow(p) == 0) return(NULL)
+
+  message("<<<  Remove zero influence particles and positions outside of domain at time: ", Sys.time() - begin_time)
   
   # Pre grid particle locations
   p <- p %>%
@@ -208,10 +233,15 @@ calc_footprint <- function(p, output = NULL, r_run_time,
     dplyr::summarize(foot = sum(foot, na.rm = T)) %>%
     ungroup()
   
+  message("<<<  Pre grid particle locations at time: ", Sys.time() - begin_time)
+
   # Dimensions in accordance with CF convention (x, y, t)
   nx <- length(glati_buf)
   ny <- length(glong_buf)
   grd <- matrix(0, nrow = ny, ncol = nx)
+
+  message("<<<  Dimensions in accordance with CF convention (x, y, t) at time: ", Sys.time() - begin_time)
+
   
   # Split particle data by footprint layer
   interval <- 3600
@@ -220,36 +250,89 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   
   layers <- sort(unique(p$layer))
   nlayers <- length(layers)
+
+  message("<<<  Split particle data by footprint layer at time: ", Sys.time() - begin_time)
+  
+  perf0 <- 0
+  perf1 <- 0
+  perf2 <- 0
+  perf3 <- 0
+  perf4 <- 0
+  perf5 <- 0
+  perf6 <- 0
+  perf7 <- 0
   
   # Allocate and fill footprint output array
   foot <- array(grd, dim = c(dim(grd), nlayers))
+  message("nlayers is ", nlayers, ", grid is ", nx, " x ", ny)
   for (i in 1:nlayers) {
+    .C("create_footprint", nrow=as.integer(ny), ncol=as.integer(nx))
+    perf0 <- perf0 - as.numeric(Sys.time())
     layer_subset <- dplyr::filter(p, layer == layers[i])
+    perf0 <- perf0 + as.numeric(Sys.time())
     
+    perf1 <- perf1 - as.numeric(Sys.time())
     rtimes <- unique(layer_subset$rtime)
+    perf1 <- perf1 + as.numeric(Sys.time())
+    message("length(rtimes) is ", length(rtimes))
     for (j in 1:length(rtimes)) {
+      perf2 <- perf2 - as.numeric(Sys.time())
       step <- dplyr::filter(layer_subset, rtime == rtimes[j])
+      perf2 <- perf2 + as.numeric(Sys.time()) # 0.6 sec
       
       # Create dispersion kernel based using nearest-in-time kernel bandwidth w
+      perf3 <- perf3 - as.numeric(Sys.time())
       step_w <- w[find_neighbor(rtimes[j], kernel$rtime)]
+      perf3 <- perf3 + as.numeric(Sys.time())
+
+      perf4 <- perf4 - as.numeric(Sys.time()) # 1.3 sec
+      message("kernel ", j, " ", xyres, " ", step_w)
       k <- make_gauss_kernel(xyres, step_w, projection)
+      perf4 <- perf4 + as.numeric(Sys.time())
       
+      perf5 <- perf5 - as.numeric(Sys.time())
       # Array dimensions
       len <- nrow(step)
       nkx <- ncol(k)
       nky <- nrow(k)
+      message("kernel dims ", nkx, " x ", nky)
+      perf5 <- perf5 + as.numeric(Sys.time())
       
+      perf6 <- perf6 - as.numeric(Sys.time()) # 0.6 sec -> 0.014 sec
       # Call permute fortran subroutine to build and aggregate kernels
-      out <- .Fortran('permute', ans = grd, nax = nx, nay = ny, k = k, 
-                      nkx = nkx, nky = nky, len = len, lai = step$lai, 
-                      loi = step$loi, foot = step$foot)
-      foot[ , , i] <- foot[ , , i] + out$ans
+      # out <- .Fortran('permute', ans = grd, nax = nx, nay = ny, k = k, 
+      #                 nkx = nkx, nky = nky, len = len, lai = step$lai, 
+      #                 loi = step$loi, foot = step$foot)
+      .C('permute', 
+          k = k, nkx=nkx, nky=nky, # Kernel and its dimensions
+          len = len, # Number of locations to add kernel
+          lai = step$lai, loi = step$loi, # xs (lat!) and ys (long!) to add kernel
+          foot = step$foot) # weights to add kernel
+
+      perf6 <- perf6 + as.numeric(Sys.time())
+
+      perf7 <- perf7 - as.numeric(Sys.time()) # 3.2 sec -> 0.002 sec
+      perf7 <- perf7 + as.numeric(Sys.time())
     }
+    ans = .Call('read_footprint')
+    foot[ , , i] <- matrix(ans, nrow=ny)
   }
+
+  message("<<< perf0: ", perf0)
+  message("<<< perf1: ", perf1)
+  message("<<< perf2: ", perf2)
+  message("<<< perf3: ", perf3)
+  message("<<< perf4: ", perf4)
+  message("<<< perf5: ", perf5)
+  message("<<< perf6: ", perf6)
+  message("<<< perf7: ", perf7)
+  message("<<<  Allocate and fill footprint output array at time: ", Sys.time() - begin_time)
   
   # Remove spatial buffer around domain used in kernel aggregation
   size <- dim(foot)
   foot <- foot[(xbuf+1):(size[1]-xbuf), (ybuf+1):(size[2]-ybuf), ] / np
+
+  message("<<<  Remove spatial buffer around domain used in kernel aggregation at time: ", Sys.time() - begin_time)
   
   # Determine time to use in output files
   if (time_integrate) {
@@ -257,9 +340,14 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   } else {
     time_out <- as.numeric(r_run_time + layers * interval)
   }
+
+  message("<<<  Determine time to use in output files at time: ", Sys.time() - begin_time)
   
   # Set footprint metadata and write to file
   write_footprint(foot, output = output, glong = glong, glati = glati,
                   projection = projection, xres = xres, yres = yres,
                   time_out = time_out)
+  message("<<< Wrote to: ", output)
+  message("<<<  Set footprint metadata and write to file at time: ", Sys.time() - begin_time)
+
 }
