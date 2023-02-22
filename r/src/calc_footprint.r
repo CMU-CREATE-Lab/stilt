@@ -35,7 +35,6 @@
 #' @import dplyr, proj4, raster
 #' @export
 
-
 # Gaussian kernel weighting calculation
 make_gauss_kernel <- function (rs, sigma, projection) {
   # Modified from raster:::.Gauss.weight()
@@ -75,7 +74,7 @@ calc_footprint <- function(p, output = NULL, r_run_time,
                            smooth_factor = 1, time_integrate = F,
                            xmn, xmx, xres, ymn, ymx, yres = xres) {
 
-
+  message("<<<  Inside calc_footprint.r ")
   begin_time = Sys.time();
 
   require(dplyr)
@@ -196,7 +195,7 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   
   message("<<<  Gaussian kernel bandwidth scaling at time: ", Sys.time() - begin_time)
 
-  # Determine maximum kernel size
+  # Determine maximum kernel size -> 0.4 sec
   xyres <- c(xres, yres)
   max_k <- make_gauss_kernel(xyres, max(w), projection)
 
@@ -271,40 +270,84 @@ calc_footprint <- function(p, output = NULL, r_run_time,
     layer_subset <- dplyr::filter(p, layer == layers[i])
     perf0 <- perf0 + as.numeric(Sys.time())
     
+      # TODO: could we maybe loop once and slot all particles into one list per timestep?
+      # fast way to do this:  https://stackoverflow.com/a/29870770/3304288
+      #list_ = {
+      #      a <- list(0)
+      #      for(i in 1:n) {a <- list(a, list(i))}
+      #  },
     perf1 <- perf1 - as.numeric(Sys.time())
     rtimes <- unique(layer_subset$rtime)
     perf1 <- perf1 + as.numeric(Sys.time())
-    message("length(rtimes) is ", length(rtimes))
+      # message("length(rtimes) is ", length(rtimes))
+      # message("")
+      # message("length(layer_subset$rtime) is ", length(layer_subset$rtime))
+      # message("length(layer_subset) is ", length(layer_subset))
+      # message("typeof(layer_subset) is ", typeof(layer_subset))
+      # message("layer_subset[1] is ", layer_subset[1][1:10])
+      # message("layer_subset[2] is ", layer_subset[2][1:10])
+      
+      # # q: how do you slice a vector
+     
+    by_time <- split(layer_subset, f = layer_subset$rtime)
+
+      # message("by_time ", by_time)
+      # message("length(by_time) ", length(by_time))
+      # message("by_time[1] ", by_time[1][1:10])
+      # message("by_time[0] ", by_time[0][1:10])
+
+
     for (j in 1:length(rtimes)) {
       perf2 <- perf2 - as.numeric(Sys.time())
-      step <- dplyr::filter(layer_subset, rtime == rtimes[j])
-      perf2 <- perf2 + as.numeric(Sys.time()) # 0.6 sec
+      step <- bind_rows(by_time[j])
+      #step <- as.data.frame(by_time[j])
+      #colnames(step) <- names(layer_subset)
+      #step <- dplyr::filter(layer_subset, rtime == rtimes[j]) #len == 6
       
-      # Create dispersion kernel based using nearest-in-time kernel bandwidth w
+      #print(step)
+      #print(typeof(step))
+      perf2 <- perf2 + as.numeric(Sys.time()) # 0.6 sec -> 0.06 sec
+      
+      # Create dispersion kernel based using nearest-in-time kernel bandwidth
       perf3 <- perf3 - as.numeric(Sys.time())
       step_w <- w[find_neighbor(rtimes[j], kernel$rtime)]
       perf3 <- perf3 + as.numeric(Sys.time())
 
-      perf4 <- perf4 - as.numeric(Sys.time()) # 1.3 sec
-      message("kernel ", j, " ", xyres, " ", step_w)
-      k <- make_gauss_kernel(xyres, step_w, projection)
+      perf4 <- perf4 - as.numeric(Sys.time()) # 1.3 sec -> 0 sec
+      #message("kernel ", j, " ", xyres, " ", step_w, " ", projection)
+      #k <- make_gauss_kernel(xyres, step_w, projection)
       perf4 <- perf4 + as.numeric(Sys.time())
       
       perf5 <- perf5 - as.numeric(Sys.time())
       # Array dimensions
       len <- nrow(step)
-      nkx <- ncol(k)
-      nky <- nrow(k)
-      message("kernel dims ", nkx, " x ", nky)
+      # print(len)
+      #nkx <- ncol(k)
+      #nky <- nrow(k)
+      #message("kernel dims ", nkx, " x ", nky)
       perf5 <- perf5 + as.numeric(Sys.time())
       
-      perf6 <- perf6 - as.numeric(Sys.time()) # 0.6 sec -> 0.014 sec
+      perf6 <- perf6 - as.numeric(Sys.time()) # 0.6 sec -> 0.043 sec
       # Call permute fortran subroutine to build and aggregate kernels
       # out <- .Fortran('permute', ans = grd, nax = nx, nay = ny, k = k, 
       #                 nkx = nkx, nky = nky, len = len, lai = step$lai, 
       #                 loi = step$loi, foot = step$foot)
+
+
+      d <- 3 * step_w # 3 * sigma
+      stopifnot(xyres[1] == xyres[2])
+      nkx <- as.integer(1 + 2 * as.integer(d/xyres[1]))
+      nky <- as.integer(1 + 2 * as.integer(d/xyres[2]))
+      stopifnot(nkx == nky)
+      stopifnot(is.integer(nkx))
+      # message("nkx ", nkx)
+
+      # Compute sigma in units of matrix coords
+      sigma_elements = step_w/xyres[1]
+
+
       .C('permute', 
-          k = k, nkx=nkx, nky=nky, # Kernel and its dimensions
+          sigma=sigma_elements, nkx=nkx, nky=nky, # Kernel and its dimensions
           len = len, # Number of locations to add kernel
           lai = step$lai, loi = step$loi, # xs (lat!) and ys (long!) to add kernel
           foot = step$foot) # weights to add kernel

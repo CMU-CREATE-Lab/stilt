@@ -1,3 +1,10 @@
+# Ensure dependencies are loaded for current node/process
+load_dependencies <- function(stilt_wd="/usr/local/stilt") {
+  source(file.path(stilt_wd, 'r/dependencies.r'), local = T)
+}
+
+
+
 #' simulation_step runs STILT for the given receptor
 #' @author Ben Fasoli
 #'
@@ -124,6 +131,9 @@ simulation_step <- function(before_footprint = list(function() {output}),
                             z_top = 25000,
                             zcoruverr = NA,
                             ...) {
+
+  begin_time = Sys.time();
+
   try({
     setwd(stilt_wd)
     
@@ -148,8 +158,12 @@ simulation_step <- function(before_footprint = list(function() {output}),
     if (!run_trajec && !run_foot)
       stop('simulation_step(): Nothing to do, set run_trajec or run_foot to T')
     
-    # Ensure dependencies are loaded for current node/process
-    source(file.path(stilt_wd, 'r/dependencies.r'), local = T)
+    message("<<<  Before loaded dependencies.r at: ", Sys.time() - begin_time)
+
+    # # Ensure dependencies are loaded for current node/process
+    # source(file.path(stilt_wd, 'r/dependencies.r'), local = T)
+
+    message("<<<  Loaded dependencies.r at: ", Sys.time() - begin_time) # Takes 1.6 sec
     
     # Aggregate STILT/HYSPLIT namelist
     namelist <- list(
@@ -266,7 +280,10 @@ simulation_step <- function(before_footprint = list(function() {output}),
         return()
       }
       
+      message("<<<  find_met_files finished at: ", Sys.time() - begin_time)
+      
       if (met_subgrid_enable) {
+        message("<<<  met_subgrid_enable is true")
         met_path <- file.path(output_wd, 'met')
         calc_met_subgrids(met_files, met_path, exe,
                           projection, xmn, xmx, ymn, ymx,
@@ -274,6 +291,7 @@ simulation_step <- function(before_footprint = list(function() {output}),
                           met_subgrid_buffer = met_subgrid_buffer)
       }
       
+      # TODO(pdille): Why is this code here again??
       # Find necessary met files
       met_files <- find_met_files(r_run_time, met_file_format, n_hours, met_path)
       if (length(met_files) < n_met_min) {
@@ -283,6 +301,8 @@ simulation_step <- function(before_footprint = list(function() {output}),
         cat(msg, '\n', file = file.path(rundir, 'stilt.log'), append = T)
         return()
       }
+
+      message("<<<  second run of find_met_files finished at: ", Sys.time() - begin_time)
       
       # Execute particle trajectory simulation, and read results into data frame
       output$receptor <- list(run_time = r_run_time,
@@ -290,12 +310,14 @@ simulation_step <- function(before_footprint = list(function() {output}),
                               long = r_long,
                               zagl = r_zagl)
       
+      message("<<<  before calc_trajectory: ", Sys.time() - begin_time)
       # User defined function to mutate the output object
       output <- before_trajec()
       particle <- calc_trajectory(namelist, rundir, emisshrs, hnf_plume, 
                                   met_files, n_hours, output, rm_dat, timeout,
                                   w_option, z_top)
       if (is.null(particle)) return()
+      message("<<<  calc_trajectory finished at: ", Sys.time() - begin_time) # Takes 6 sec
       
       # Bundle trajectory configuration metadata with trajectory informtation
       output$particle <- particle
@@ -353,12 +375,14 @@ simulation_step <- function(before_footprint = list(function() {output}),
     footprint_varsiwant <- c('time', 'indx', 'long', 'lati', 'foot')
     output$particle <- output$particle[ , footprint_varsiwant]
     
+    message("<<< Parsing done and Begin calc_footprint.r: at ", Sys.time() - begin_time)
     # Produce footprint --------------------------------------------------------
     # Aggregate the particle trajectory into surface influence footprints. This
     # outputs a .rds file, which can be read with readRDS() containing the
     # resultant footprint and various attributes
     foot_file <- file.path(rundir, paste0(simulation_id, '_foot.nc'))
-    foot <- calc_footprint(output$particle, output = foot_file,
+    # pdille: saving to variable 'foot' removed from below 
+    calc_footprint(output$particle, output = foot_file,
                            r_run_time = r_run_time,
                            projection = projection,
                            smooth_factor = smooth_factor,
@@ -366,21 +390,22 @@ simulation_step <- function(before_footprint = list(function() {output}),
                            xmn = xmn, xmx = xmx, xres = xres,
                            ymn = ymn, ymx = ymx, yres = yres)
     
-    # Unload trajectories from memory and trigger garbage collection
-    rm(output)
-    invisible(gc())
+    ## TODO: Commented out by pdille. Saves 200ms and doesn't seem to be necessary for single runs?
+    # # Unload trajectories from memory and trigger garbage collection
+    # rm(output)
+    # invisible(gc())
     
-    if (is.null(foot)) {
-      msg <- 'No non-zero footprint values found within the footprint domain.'
-      warning(msg)
-      cat(msg, '\n', file = file.path(rundir, 'stilt.log'), append = T)
-      return()
-    }
+    # if (is.null(foot)) {
+    #   msg <- 'No non-zero footprint values found within the footprint domain.'
+    #   warning(msg)
+    #   cat(msg, '\n', file = file.path(rundir, 'stilt.log'), append = T)
+    #   return()
+    # }
     
-    # Symlink footprint to out/footprints
-    link <- file.path(output_wd, 'footprints', basename(foot_file))
-    suppressWarnings(file.symlink(foot_file, link))
+    # # Symlink footprint to out/footprints
+    # link <- file.path(output_wd, 'footprints', basename(foot_file))
+    # suppressWarnings(file.symlink(foot_file, link))
 
-    return(foot)
+    # return(foot)
   })
 }
