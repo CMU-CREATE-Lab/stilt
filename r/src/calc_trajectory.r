@@ -50,7 +50,12 @@ calc_trajectory <- function(namelist,
   # Simulation timeout ---------------------------------------------------------
   # Monitors time elapsed running hycs_std If elapsed time exceeds timeout
   # specified in run_stilt.r, kills hycs_std and moves on to next simulation
-  cmd <- paste0('cd ', rundir, ' && ./hycs_std >> stilt.log 2>&1')
+
+  library("here")
+  #cmd <- paste0('cd ', rundir, ' && ', here(), '/r/src/hycs_std_multi.py >> stilt.log 2>&1')
+  cmd <- paste0('cd ', rundir, ' && ', here(), '/r/src/hycs_std_multi.py')
+  #cmd <- paste0('cd ', rundir, ' && ./hycs_std')
+  message('going to run ', cmd)
   system(cmd, timeout = timeout)
   perf2 <- perf2 + as.numeric(Sys.time())
 

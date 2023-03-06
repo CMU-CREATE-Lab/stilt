@@ -23,7 +23,7 @@ Rprof("/tmp/Rprof.out")
 source(file.path("/usr/local/stilt", 'r', 'src', 'simulation_step.r'))
 load_dependencies()
 
-for (loop_idx in 1:2) {
+for (loop_idx in 1:1) {
     loop_perf0 <- as.numeric(Sys.time())
     # Extract kv pairs for supplied arguments -------------------------------------
     arg_strings <- commandArgs(trailingOnly = T)
