@@ -5,19 +5,10 @@
 if (!'stilt_wd' %in% ls())
   stilt_wd <- getwd()
 
-perf0 <- 0
-perf1 <- 0
-perf2 <- 0
-perf3 <- 0
-perf4 <- 0
-
-perf0 <- perf0 - as.numeric(Sys.time())
 # Source r/src R scripts
 rsc <- dir(file.path(stilt_wd, 'r', 'src'), pattern = '.*\\.r$', full.names = T)
 invisible(lapply(rsc, source))
-perf0 <- perf0 + as.numeric(Sys.time())
 
-perf1 <- perf1 - as.numeric(Sys.time())
 # Load external libraries
 if (!'lib.loc' %in% ls()) lib.loc <- NULL
 libs <- load_libs('dplyr',
@@ -25,18 +16,15 @@ libs <- load_libs('dplyr',
                   'parallel',
                   'raster',
                   'rslurm',
+                  'here',
                   lib.loc = lib.loc)
-perf1 <- perf1 + as.numeric(Sys.time())
 
-perf2 <- perf2 - as.numeric(Sys.time())
 # Load permute fortran dll for footprint matrix permutation
 permute_exe <- file.path(stilt_wd, 'r/src/permute.so')
 if (!file.exists(permute_exe))
   stop('calc_footprint(): failed to find permute.so in r/src/')
 dyn.load(permute_exe)
-perf2 <- perf2 + as.numeric(Sys.time())
 
-perf3 <- perf3 - as.numeric(Sys.time())
 # Validate arguments and load dependencies if necessary
 if ((!class(projection) == 'function') && ('projection' %in% ls()))
   validate_projection(projection)
@@ -44,12 +32,189 @@ if ('varsiwant' %in% ls())
   validate_varsiwant(varsiwant)
 if (all(c('xmn', 'xmx', 'ymn', 'ymx') %in% ls()))
   validate_footprint_extent(xmn, xmx, ymn, ymx)
-perf3 <- perf3 + as.numeric(Sys.time())
 
 # Disable grouping message from dplyr >=1.0.0
 options(dplyr.summarise.inform = F)
 
-message("<<<    dependencies.r, perf0: ", perf0)
-message("<<<    dependencies.r, perf1: ", perf1)
-message("<<<    dependencies.r, perf2: ", perf2)
-message("<<<    dependencies.r, perf3: ", perf3)
+do_run <- function(arg_list) {
+    #args <- list(...)
+
+    arg_names <- list()
+    arg_values <- list()
+    for (arg in arg_list) {
+        tmp <- strsplit(arg, split = "=")
+        arg_values <- append(arg_values, tmp[[1]][1])
+        arg_names <- append(arg_names, tmp[[1]][2])
+    }
+
+    args <- setNames(arg_names, arg_values)
+
+    # Validate required arguments exist
+    req_args <- c('met_file_format', 'met_path', 'r_run_time', 'r_lati', 'r_long',
+                'r_zagl', 'xmn', 'xmx', 'xres', 'ymn', 'ymx', 'yres')
+    if (!all(req_args %in% names(args))) {
+        stop(paste('Not all arguments supplied:',
+                paste(req_args, collapse=',')))
+    }
+
+    # Ensure script is executed from the correct place
+    for (i in 1:99) {
+        if ('stilt_wd' %in% names(args)) break
+        cwd <- dir()
+        is_stilt <- all(c('bin', 'exe', 'r', 'README.md', 'setup') %in% cwd)
+        if (is_stilt) {
+            args$stilt_wd <- getwd()
+        } else {
+            setwd('..')
+        }
+    }
+    if (i == 99) {
+        stop('Could not identify STILT project directory - specify stilt_wd manually')
+    }
+
+    # Conditionally configure point vs line receptors
+    if (grepl(',', args$r_lati, fixed=T)) {
+        lati_parts <- strsplit(args$r_lati, ',', fixed=T)[[1]]
+        r_lati <- lapply(lati_parts, function(x) as.numeric(x))
+    } else {
+        r_lati <- as.numeric(args$r_lati)
+    }
+    if (grepl(',', args$r_long, fixed=T)) {
+        long_parts <- strsplit(args$r_long, ',', fixed=T)[[1]]
+        r_long <- lapply(long_parts, function(x) as.numeric(x))
+    } else {
+        r_long <- as.numeric(args$r_long)
+    }
+    if (grepl(',', args$r_zagl, fixed=T)) {
+        zagl_parts <- strsplit(args$r_zagl, ',', fixed=T)[[1]]
+        r_zagl <- lapply(zagl_parts, function(x) as.numeric(x))
+    } else {
+        r_zagl <- as.numeric(args$r_zagl)
+    }
+
+    if ((length(r_lati) > 1) && (length(r_long) > 1) && (is.na(args$simulation_id))) {
+        stop('Must specify simulation_id for slant column releases.')
+    }
+
+    # Set argument types
+    stilt_args <- list(
+        capemin <- as.numeric(args$capemin),
+        cmass <- as.numeric(args$cmass),
+        conage = as.numeric(args$conage),
+        cpack = as.numeric(args$cpack),
+        dxf = as.numeric(args$dxf),
+        dyf = as.numeric(args$dyf),
+        dzf = as.numeric(args$dzf),
+        efile = as.character(args$efile),
+        emisshrs = as.numeric(args$emisshrs),
+        frhmax = as.numeric(args$frhmax),
+        frhs = as.numeric(args$frhs),
+        frme = as.numeric(args$frme),
+        frmr = as.numeric(args$frmr),
+        frts = as.numeric(args$frts),
+        frvs = as.numeric(args$frvs),
+        hnf_plume = as.logical(args$hnf_plume),
+        horcoruverr = as.numeric(args$horcoruverr),
+        horcorzierr = as.numeric(args$horcorzierr),
+        hscale = as.numeric(args$hscale),
+        ichem = as.numeric(args$ichem),
+        idsp = as.numeric(args$idsp),
+        initd = as.numeric(args$initd),
+        k10m = as.numeric(args$k10m),
+        kagl = as.numeric(args$kagl),
+        kbls = as.numeric(args$kbls),
+        kblt = as.numeric(args$kblt),
+        kdef = as.numeric(args$kdef),
+        khinp = as.numeric(args$khinp),
+        khmax = as.numeric(args$khmax),
+        kmix0 = as.numeric(args$kmix0),
+        kmixd = as.numeric(args$kmixd),
+        kmsl = as.numeric(args$kmsl),
+        kpuff = as.numeric(args$kpuff),
+        krand = as.numeric(args$krand),
+        krnd = as.numeric(args$krnd),
+        kspl = as.numeric(args$kspl),
+        kwet = as.numeric(args$kwet),
+        kzmix = as.numeric(args$kzmix),
+        lib.loc = as.character(args$lib.loc),
+        maxdim = as.numeric(args$maxdim),
+        maxpar = as.numeric(args$maxpar),
+        met_file_format = as.character(args$met_file_format),
+        met_path = as.character(args$met_path),
+        met_subgrid_buffer = as.numeric(args$met_subgrid_buffer),
+        met_subgrid_enable = as.logical(args$met_subgrid_enable),
+        met_subgrid_levels = as.numeric(args$met_subgrid_levels),
+        mgmin = as.numeric(args$mgmin),
+        n_hours = as.numeric(args$n_hours),
+        n_met_min = as.numeric(args$n_met_min),
+        ncycl = as.numeric(args$ncycl),
+        ndump = as.numeric(args$ndump),
+        ninit = as.numeric(args$ninit),
+        nstr = as.numeric(args$nstr),
+        nturb = as.numeric(args$nturb),
+        numpar = as.numeric(args$numpar),
+        nver = as.numeric(args$nver),
+        outdt = as.numeric(args$outdt),
+        outfrac = as.numeric(args$outfrac),
+        output_wd = as.character(args$output_wd),
+        p10f = as.numeric(args$p10f),
+        pinbc = as.character(args$pinbc),
+        pinpf = as.character(args$pinpf),
+        poutf = as.character(args$poutf),
+        projection = as.character(args$projection),
+        qcycle = as.numeric(args$qcycle),
+        r_run_time = as.POSIXct(args$r_run_time,
+                                tz = 'UTC',
+                                format = '%Y-%m-%dT%H:%M:%S'),
+        r_lati = r_lati,
+        r_long = r_long,
+        r_zagl = r_zagl,
+        random = as.numeric(args$random),
+        rhb = as.numeric(args$rhb),
+        rht = as.numeric(args$rht),
+        rm_dat = as.logical(args$rm_dat),
+        run_foot = as.logical(args$run_foot),
+        run_trajec = as.logical(args$run_trajec),
+        siguverr = as.numeric(args$siguverr),
+        sigzierr = as.numeric(args$sigzierr),
+        simulation_id = as.character(args$simulation_id),
+        smooth_factor = as.numeric(args$smooth_factor),
+        splitf = as.numeric(args$splitf),
+        stilt_wd = as.character(args$stilt_wd),
+        time_integrate = as.logical(args$time_integrate),
+        timeout = as.numeric(args$timeout),
+        tkerd = as.numeric(args$tkerd),
+        tkern = as.numeric(args$tkern),
+        tlfrac = as.numeric(args$tlfrac),
+        tluverr = as.numeric(args$tluverr),
+        tlzierr = as.numeric(args$tlzierr),
+        tout = as.numeric(args$tout),
+        tratio = as.numeric(args$tratio),
+        tvmix = as.numeric(args$tvmix),
+        varsiwant = as.character(args$varsiwant),
+        veght = as.numeric(args$veght),
+        vscale = as.numeric(args$vscale),
+        vscaleu = as.numeric(args$vscaleu),
+        vscales = as.numeric(args$vscales),
+        w_option = as.numeric(args$w_option),
+        wbbh = as.numeric(args$wbbh),
+        wbwf = as.numeric(args$wbwf),
+        wbwr = as.numeric(args$wbwr),
+        wvert = as.logical(args$wvert),
+        xmn = as.numeric(args$xmn),
+        xmx = as.numeric(args$xmx),
+        xres = as.numeric(args$xres),
+        ymn = as.numeric(args$ymn),
+        ymx = as.numeric(args$ymx),
+        yres = as.numeric(args$yres),
+        zicontroltf = as.numeric(args$zicontroltf),
+        ziscale = as.numeric(args$ziscale),
+        z_top = as.numeric(args$z_top),
+        zcoruverr = as.numeric(args$zcoruverr)
+    )
+    stilt_args <- stilt_args[sapply(stilt_args, function(x) length(x) > 0)]
+    # source(file.path(stilt_args$stilt_wd, 'r', 'src', 'simulation_step.r'))
+    message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; calling simulation_step.r")
+    result <- do.call(simulation_step, stilt_args)
+    message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; Finished simulation_step.r")
+}

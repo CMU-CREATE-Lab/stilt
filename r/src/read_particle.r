@@ -11,7 +11,7 @@
 
 read_particle <- function(file, varsiwant) {
 
-  require(dplyr)
+  #require(dplyr)
 
   n_lines <- count_lines(file)
 

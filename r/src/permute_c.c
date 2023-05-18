@@ -12,7 +12,7 @@ void create_footprint(int *nrows_in, int *ncols_in) {
     footprint_ncols = *ncols_in;
     if (footprint) free(footprint);
     footprint = calloc(footprint_nrows*footprint_ncols, sizeof(double));
-    fprintf(stderr, "Created footprint size %d x %d at %p\n", footprint_nrows, footprint_ncols, footprint);
+    //fprintf(stderr, "Created footprint size %d x %d at %p\n", footprint_nrows, footprint_ncols, footprint);
 }
 
 void permute(double *sigma_in, int *nkx_in, int *nky_in, // kernel and its dimensions
@@ -25,6 +25,16 @@ void permute(double *sigma_in, int *nkx_in, int *nky_in, // kernel and its dimen
     assert(nkx == nky);
     assert(nkx % 2 == 1);  // always odd dimension so the gaussian is centered on a sample
     int nl = *nl_in;
+
+    double la_ctr = 0, lo_ctr = 0;
+    for (int i = 0; i < nl; i++) {
+        la_ctr += lai[i];
+        lo_ctr += loi[i];
+    }
+    la_ctr /= nl;
+    lo_ctr /= nl;
+
+    //fprintf(stderr, "permute called with sigma %lg, center of mass %lg,%lg, nkx %d, nky %d, nl %d\n", sigma, la_ctr, lo_ctr, nkx, nky, nl);
     double gaussian[nkx];
     int kernel_midpoint = nkx/2; // midpoint is 2,2 for 5x5;  3,3 for 7x7, etc
     for (int x = 0; x < nkx/2; x++) { // x is dist from center of gaussian
