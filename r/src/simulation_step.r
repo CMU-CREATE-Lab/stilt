@@ -132,7 +132,7 @@ simulation_step <- function(before_footprint = list(function() {output}),
                             zcoruverr = NA,
                             ...) {
 
-  begin_time = Sys.time();
+  begin_time <- Sys.time()
 
   try({
     setwd(stilt_wd)
@@ -156,12 +156,8 @@ simulation_step <- function(before_footprint = list(function() {output}),
     if (!run_trajec && !run_foot)
       stop('simulation_step(): Nothing to do, set run_trajec or run_foot to T')
 
-    #message("<<<  Before loaded dependencies.r at: ", Sys.time() - begin_time)
-
     # # Ensure dependencies are loaded for current node/process
     # source(file.path(stilt_wd, 'r/dependencies.r'), local = T)
-
-    #message("<<<  Loaded dependencies.r at: ", Sys.time() - begin_time) # Takes 1.6 sec
 
     # Aggregate STILT/HYSPLIT namelist
     namelist <- list(
@@ -248,6 +244,7 @@ simulation_step <- function(before_footprint = list(function() {output}),
                                      ifelse(length(r_zagl) > 1, 'X', r_zagl))
       simulation_id <- strftime(r_run_time, simulation_id_format, 'UTC')
     }
+
     rundir  <- file.path(output_wd, 'by-id', simulation_id)
     dir.create(rundir, showWarnings = F, recursive = T)
     dir.create(file.path(output_wd, 'particles'), showWarnings = F, recursive = T)
@@ -267,8 +264,6 @@ simulation_step <- function(before_footprint = list(function() {output}),
 
       exe <- file.path(stilt_wd, 'exe')
       link_files(exe, rundir)
-
-      message(">>>    simulaton_step.r, find_met_files started at: ", Sys.time() - begin_time)
 
       # Find necessary met files
       met_files <- find_met_files(r_run_time, met_file_format, n_hours, met_path)
@@ -298,23 +293,18 @@ simulation_step <- function(before_footprint = list(function() {output}),
         }
       }
 
-      message(">>>    simulaton_step.r, find_met_files finished at: ", Sys.time() - begin_time)
-
       # Execute particle trajectory simulation, and read results into data frame
       output$receptor <- list(run_time = r_run_time,
                               lati = r_lati,
                               long = r_long,
                               zagl = r_zagl)
 
-      message(format(Sys.time(), "%H:%M.%OS6"), "  simulation_step.r; calling calc_trajactory.r")
-      #message(">>>    before calc_trajectory: ", Sys.time() - begin_time)
       # User defined function to mutate the output object
       output <- before_trajec()
       particle <- calc_trajectory(namelist, rundir, emisshrs, hnf_plume, 
                                   met_files, n_hours, output, rm_dat, timeout,
                                   w_option, z_top)
       if (is.null(particle)) return()
-      ###message(">>>    calc_trajectory finished at: ", Sys.time() - begin_time) # Takes 6 sec
 
       # Bundle trajectory configuration metadata with trajectory informtation
       output$particle <- particle
@@ -372,8 +362,6 @@ simulation_step <- function(before_footprint = list(function() {output}),
     footprint_varsiwant <- c('time', 'indx', 'long', 'lati', 'foot')
     output$particle <- output$particle[ , footprint_varsiwant]
 
-    ##message(">>>    Parsing done and Begin calc_footprint.r: at ", Sys.time() - begin_time)
-    message(format(Sys.time(), "%H:%M.%OS6"), "  simulation_step.r; calling calc_footprint.r")
     # Produce footprint --------------------------------------------------------
     # Aggregate the particle trajectory into surface influence footprints. This
     # outputs a .rds file, which can be read with readRDS() containing the
@@ -387,10 +375,6 @@ simulation_step <- function(before_footprint = list(function() {output}),
                            time_integrate = time_integrate,
                            xmn = xmn, xmx = xmx, xres = xres,
                            ymn = ymn, ymx = ymx, yres = yres)
-
-
-    ##message(">>>    simulaton_step.r, Finished simulation_step.r: ", Sys.time() - begin_time)
-    ####message(format(Sys.time(), "%H:%M.%OS6"), "  simulation_step.r; Finished simulation_step.r")
 
     ## TODO: Commented out by pdille. Saves 200ms and doesn't seem to be necessary for single runs?
     # # Unload trajectories from memory and trigger garbage collection

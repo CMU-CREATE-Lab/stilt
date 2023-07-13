@@ -213,7 +213,6 @@ do_run <- function(arg_list) {
         zcoruverr = as.numeric(args$zcoruverr)
     )
     stilt_args <- stilt_args[sapply(stilt_args, function(x) length(x) > 0)]
-    # source(file.path(stilt_args$stilt_wd, 'r', 'src', 'simulation_step.r'))
     message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; calling simulation_step.r")
     result <- do.call(simulation_step, stilt_args)
     message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; Finished simulation_step.r")

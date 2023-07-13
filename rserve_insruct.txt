@@ -1,0 +1,3 @@
+To start Rserve, run the following command from the root stilt directory, where the Rserve.conf file is located.
+
+R CMD Rserve --RS-conf Rserve.conf >> rserve.log 2>&1

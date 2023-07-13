@@ -28,3 +28,9 @@ exe/xtrct_time
 # Test inputs
 stilt-tutorials
 *.bak
+
+# VSCode
+.history/
+.vscode/
+r/.lintr
+rserve.log

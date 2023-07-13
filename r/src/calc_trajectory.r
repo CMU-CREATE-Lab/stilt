@@ -23,9 +23,6 @@ calc_trajectory <- function(namelist,
                             w_option,
                             z_top) {
 
-  perf0 <- 0
-  perf4 <- 0
-
   # Enable manual rescaling of mixed layer height
   if (as.logical(namelist[['zicontroltf']])) {
     write_zicontrol(namelist[['ziscale']], file.path(rundir, 'ZICONTROL'))
@@ -37,17 +34,14 @@ calc_trajectory <- function(namelist,
   write_control(output$receptor, emisshrs, n_hours, w_option, z_top, met_files,
                 file.path(rundir, 'CONTROL'))
 
-  perf0 <- perf0 - as.numeric(Sys.time())
   # Simulation timeout ---------------------------------------------------------
   # Monitors time elapsed running hycs_std If elapsed time exceeds timeout
   # specified in run_stilt.r, kills hycs_std and moves on to next simulation
 
-  #cmd <- paste0('cd ', rundir, ' && ', here(), '/r/src/hycs_std_multi.py >> stilt.log 2>&1')
   cmd <- paste0('cd ', rundir, ' && ', here(), '/r/src/hycs_std_multi.py')
   #cmd <- paste0('cd ', rundir, ' && ./hycs_std')
 
   system(cmd, timeout = timeout)
-  perf0 <- perf0 + as.numeric(Sys.time())
 
   # Exit if running in HYSPLIT mode
   if (namelist[['ichem']] != 8) return()
@@ -71,9 +65,7 @@ calc_trajectory <- function(namelist,
   ## Perf Note: Takes ~115ms
   # Read particle file, optionally remove PARTICLE.DAT in favor of compressed
   # .rds file, and return particle data frame
-  perf4 <- perf4 - as.numeric(Sys.time())
   p <- read_particle(file = pf, varsiwant = namelist[['varsiwant']])
-  perf4 <- perf4 + as.numeric(Sys.time())
   if (rm_dat) {
     system(paste('rm', '-f', file.path(rundir, 'PARTICLE.DAT')))
   }
@@ -95,11 +87,8 @@ calc_trajectory <- function(namelist,
   # Calculate near-field dilution height based on gaussian plume width
   # approximation and recalculate footprint sensitivity for cases when the
   # plume height is less than the PBL height scaled by veght
-  if (hnf_plume) 
+  if (hnf_plume)
     p <- calc_plume_dilution(p, numpar, output$receptor$zagl, namelist[['veght']])
-
-  message(">>>    calc_trajectory.r, hycs_std_multi: ", perf0)
-  message(">>>    calc_trajectory.r, perf4: ", perf4)
 
   p
 }

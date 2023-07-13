@@ -113,8 +113,6 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   should_interpolate <- (median(distances$dx, na.rm = T) > xres) || 
     (median(distances$dy, na.rm = T) > yres)
 
-  message("SHOULD INTERPOLATE: ", should_interpolate)
-
   ## Perf Note: Takes ~250ms
   if (should_interpolate) {
     times <- c(seq(0, 10, by = 0.1),
@@ -293,7 +291,4 @@ calc_footprint <- function(p, output = NULL, r_run_time,
   write_footprint(foot, output = output, glong = glong, glati = glati,
                   projection = projection, xres = xres, yres = yres,
                   time_out = time_out)
-
-  message(format(Sys.time(), "%H:%M.%OS6"), "    calc_footprint.r; Finished calc_footprint.r")
-
 }

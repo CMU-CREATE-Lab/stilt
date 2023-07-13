@@ -22,12 +22,8 @@ load_dependencies <- function(stilt_wd="/usr/local/stilt") {
   source(file.path(stilt_wd, 'r/dependencies.r'), local = T)
 }
 
-message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; start loading dependencies.r")
-#source(file.path("/usr/local/stilt", 'r', 'src', 'simulation_step.r'))
 load_dependencies()
-message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; finished loading dependencies.r")
 
-loop_perf0 <- as.numeric(Sys.time())
 # Extract kv pairs for supplied arguments -------------------------------------
 arg_strings <- commandArgs(trailingOnly = T)
 args <- list()
@@ -203,7 +199,4 @@ stilt_args <- list(
 )
 stilt_args <- stilt_args[sapply(stilt_args, function(x) length(x) > 0)]
 # source(file.path(stilt_args$stilt_wd, 'r', 'src', 'simulation_step.r'))
-message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; calling simulation_step.r")
 result <- do.call(simulation_step, stilt_args)
-message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; Finished simulation_step.r")
-###message("Loop ", loop_idx, " took: ", as.numeric(Sys.time()) - loop_perf0)

@@ -20,8 +20,7 @@
 
 write_footprint <- function(foot, output, glong, glati, projection, time_out, 
                             xres, yres) {
-  perf1 <- 0
-  perf1 <- perf1 - as.numeric(Sys.time())
+
   is_longlat <- grepl('+proj=longlat', projection, fixed = T)
   
   # CF projection name lookup table
@@ -73,12 +72,6 @@ write_footprint <- function(foot, output, glong, glati, projection, time_out,
   # Save footprint fo file
   if (!is.null(output) && file.exists(output))
     system(paste('rm', output))
-  
-  perf1 <- perf1 + as.numeric(Sys.time())
-  message(">>>    everything up to saving .nc file: ", perf1)
-  
-  perf2 <- 0
-  perf2 <- perf2 - as.numeric(Sys.time())
 
   # netCDF output
   if (!is.null(output) && grepl('\\.nc$', output, ignore.case = T) &&
@@ -136,8 +129,6 @@ write_footprint <- function(foot, output, glong, glati, projection, time_out,
     ncatt_put(nc, 0, 'time_created', format(Sys.time(), tz = 'UTC'))
     
     nc_close(nc)
-    perf2 <- perf2 + as.numeric(Sys.time())
-    message(">>>    write_footprint.r, save .nc file: ", perf2)
     return(output)
   }
   
