@@ -37,10 +37,11 @@ void permute(double *sigma_in, int *nkx_in, int *nky_in, // kernel and its dimen
     //fprintf(stderr, "permute called with sigma %lg, center of mass %lg,%lg, nkx %d, nky %d, nl %d\n", sigma, la_ctr, lo_ctr, nkx, nky, nl);
     double gaussian[nkx];
     int kernel_midpoint = nkx/2; // midpoint is 2,2 for 5x5;  3,3 for 7x7, etc
-    for (int x = 0; x < nkx/2; x++) { // x is dist from center of gaussian
+    for (int x = 0; x <= nkx/2; x++) { // x is dist from center of gaussian
         gaussian[kernel_midpoint + x] = exp(-(x * x) / (2 * sigma * sigma));
         gaussian[kernel_midpoint - x] = gaussian[kernel_midpoint + x];
     }
+
     // Normalize sum to 1
     double sum = 0;
     for (int i = 0; i < nkx; i++) {
@@ -52,8 +53,6 @@ void permute(double *sigma_in, int *nkx_in, int *nky_in, // kernel and its dimen
 
     // Compute 1-d kernel of sigma *sigma_in
 
-    // TODO: try clipping this to the correct area to make sure we never overwrite the buffer
-
     for (int i = 0; i < nky; i++) { // loop over kernel Y
         int ys = i - (nky + 1) / 2; // subtract half the width of the kernel
         for (int j = 0; j < nkx; j++) { // loop over kernel X
@@ -62,6 +61,12 @@ void permute(double *sigma_in, int *nkx_in, int *nky_in, // kernel and its dimen
             for (int n = 0; n < nl; n++) {
                 int row = loi[n]+ys;
                 int col = lai[n]+xs;
+
+                // Boundary checks
+                if (row < 0 || row >= footprint_nrows || col < 0 || col >= footprint_ncols) {
+                    continue; // Skip out-of-bounds indices
+                }
+
                 footprint[row + col * footprint_nrows] += l_weights[n] * ks; // col-major [r,c] = r+c*nrows
             }
         }
