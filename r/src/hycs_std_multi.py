@@ -8,6 +8,12 @@ start_of_script = before
 import glob, os, re, subprocess, sys, threading, traceback
 import shutil
 
+def log(message):
+    # Prefix log messages with the current time, PID, and TID
+    message = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {os.getpid()}.{threading.get_native_id()} server {message}"
+    print(message)
+    sys.stdout.flush()
+
 # Perf tests 3/3/23:
 # 1 shard: 5.5 secs
 # 2 shards: 3.0 secs
@@ -79,13 +85,18 @@ def run_shard(shard_idx: int):
     shard_name = f"shard{shard_idx:02d}"
     os.mkdir(shard_name)
     for file_to_copy in files_to_copy:
-        shutil.copy2(file_to_copy, shard_name)
-    result = subprocess.run("./hycs_std", cwd=shard_name, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        shutil.copy(file_to_copy, shard_name)
+    exe_path = os.path.join(os.getcwd(), shard_name, "hycs_std")
+    try:
+        result = subprocess.run("./hycs_std", cwd=shard_name, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except Exception as e:
+        log(f"{exe_path} failed with exception {repr(e)}")
+        raise
     if result.returncode != 0:
-        msg = f"{result.returncode} with error: {result.stdout}"
-        print(msg)
+        msg = f"{exe_path} failed with status {result.returncode} and error {result.stdout}"
+        log(msg)
         raise RuntimeError(msg)
-    print(f"run_shard({shard_idx}) took {time.monotonic() - before:.3f} secs", file=sys.stderr)
+    log(f"run_shard({shard_idx}) took {time.monotonic() - before:.3f} secs")
     return result
 
 # Start all shards
