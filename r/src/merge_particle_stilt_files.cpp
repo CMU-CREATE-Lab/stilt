@@ -1,28 +1,45 @@
 #include <fstream>
 #include <vector>
 #include <string>
-#include <sstream>
 #include <queue>
 #include <iostream>
 #include <assert.h>
 
-// structure to hold information about each line
-struct Record {
+// Heap item only stores sort keys and file index. The line payload is kept in
+// per-file state to avoid copying large strings on every heap push/pop.
+struct HeapItem {
     double timestamp;
     int id;
-    unsigned fileIndex;
-    std::string rest;
-    
-    // Priority queue starts with highest value (e.g. descending order)
+    std::size_t fileIndex;
+};
 
-    bool operator<(const Record& other) const {
-        // Sort primarily by timestamp by descending order since this is a backtrace.
-        if (timestamp < other.timestamp) return true;
-        if (timestamp > other.timestamp) return false;
-        // Sort secondarily by particle id in ascending order (so we negate it)
-        return -id < -other.id;
+struct HeapItemLess {
+    bool operator()(const HeapItem& lhs, const HeapItem& rhs) const {
+        // Priority queue places "largest" item at top. We want descending
+        // timestamps, then ascending particle id.
+        if (lhs.timestamp < rhs.timestamp) return true;
+        if (lhs.timestamp > rhs.timestamp) return false;
+        return lhs.id > rhs.id;
     }
 };
+
+struct FileState {
+    std::ifstream stream;
+    int offset = 0;
+    double timestamp = 0.0;
+    int id = 0;
+    std::string rest;
+};
+
+static bool readNextRecord(FileState& file) {
+    if (!(file.stream >> file.timestamp >> file.id)) {
+        return false;
+    }
+    std::getline(file.stream, file.rest);
+    file.id += file.offset;
+    return true;
+}
+
 
 int main(int argc, char* argv[]) {
     // Check if there is at least one file to process
@@ -31,53 +48,59 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // priority queue to hold the first record of each file
-    std::priority_queue<Record> queue;
-
-    // open all files and read the first record of each file
-    std::vector<std::ifstream> files;
-    std::vector<int> offsets;
+    // Open all files and read first record from each.
+    std::priority_queue<HeapItem, std::vector<HeapItem>, HeapItemLess> queue;
+    std::vector<FileState> files;
+    files.reserve((argc - 2) / 2);
     std::string output_filename = argv[1];
 
     std::string header;
     for (int i = 2; i < argc; i += 2) {
-        files.emplace_back(argv[i]);
-        offsets.push_back(std::stoi(argv[i + 1]));
+        files.emplace_back();
+        FileState& file = files.back();
+        file.stream.open(argv[i]);
+        file.offset = std::stoi(argv[i + 1]);
+
+        if (!file.stream.is_open()) {
+            std::cerr << "Failed to open input file: " << argv[i] << std::endl;
+            return 1;
+        }
 
         // record the header
-        std::getline(files.back(), header);
+        if (!std::getline(file.stream, header)) {
+            std::cerr << "Failed to read header from input file: " << argv[i] << std::endl;
+            return 1;
+        }
         //std::cout << "Read header: " << header << " from file " << argv[i] << std::endl;
 
-        // read the first record
-        Record rec;
-        files.back() >> rec.timestamp >> rec.id;
-        std::getline(files.back(), rec.rest);
-        rec.fileIndex = files.size() - 1;
-        rec.id += offsets.back();
-        queue.push(rec);
+        if (readNextRecord(file)) {
+            queue.push({file.timestamp, file.id, files.size() - 1});
+        }
     }
 
     // open output file
     std::ofstream out(output_filename);
+    if (!out.is_open()) {
+        std::cerr << "Failed to open output file: " << output_filename << std::endl;
+        return 1;
+    }
 
     // write the header recorded earlier
     out << header << '\n';
 
     while (!queue.empty()) {
-        // get the record with smallest timestamp
-        Record rec = queue.top();
+        // get the highest-priority record (latest timestamp, then lowest id)
+        HeapItem rec = queue.top();
         queue.pop();
 
         // write to output file
-        out << rec.timestamp << ' ' << rec.id << rec.rest << '\n';
+        FileState& file = files[rec.fileIndex];
+        out << rec.timestamp << ' ' << rec.id << file.rest << '\n';
 
         // read the next record from the same file and add to the queue
-        unsigned fileIndex = rec.fileIndex;
-        assert(fileIndex < files.size());
-        if (files[fileIndex] >> rec.timestamp >> rec.id) {
-            std::getline(files[fileIndex], rec.rest);
-            rec.id += offsets[fileIndex];
-            queue.push(rec);
+        assert(rec.fileIndex < files.size());
+        if (readNextRecord(file)) {
+            queue.push({file.timestamp, file.id, rec.fileIndex});
         }
     }
 

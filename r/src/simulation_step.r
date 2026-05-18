@@ -92,6 +92,7 @@ simulation_step <- function(before_footprint = list(function() {output}),
                             rht = 60,
                             rm_dat = T,
                             run_foot = T,
+                            save_traj_rds = TRUE,
                             run_trajec = T,
                             siguverr = NA,
                             sigzierr = NA,
@@ -131,8 +132,6 @@ simulation_step <- function(before_footprint = list(function() {output}),
                             z_top = 25000,
                             zcoruverr = NA,
                             ...) {
-
-  begin_time <- Sys.time()
 
   try({
     setwd(stilt_wd)
@@ -258,12 +257,19 @@ simulation_step <- function(before_footprint = list(function() {output}),
     output$file <- file.path(rundir, paste0(simulation_id, '_traj.rds'))
 
     if (run_trajec) {
+
       # Ensure necessary files and directory structure are established in the
       # current rundir
       if (!dir.exists(rundir)) dir.create(rundir)
 
       exe <- file.path(stilt_wd, 'exe')
-      link_files(exe, rundir)
+      links_ready_file <- file.path(rundir, '.stilt_links_ready')
+      if (file.exists(links_ready_file)) {
+        message('simulation_step(): link_files skipped (cached links in rundir)')
+      } else {
+        link_files(exe, rundir)
+        file.create(links_ready_file)
+      }
 
       # Find necessary met files
       met_files <- find_met_files(r_run_time, met_file_format, n_hours, met_path)
@@ -301,9 +307,21 @@ simulation_step <- function(before_footprint = list(function() {output}),
 
       # User defined function to mutate the output object
       output <- before_trajec()
-      particle <- calc_trajectory(namelist, rundir, emisshrs, hnf_plume, 
-                                  met_files, n_hours, output, rm_dat, timeout,
-                                  w_option, z_top)
+      particle <- suppressMessages(
+        calc_trajectory(
+          namelist,
+          rundir,
+          emisshrs,
+          hnf_plume,
+          met_files,
+          n_hours,
+          output,
+          rm_dat,
+          timeout,
+          w_option,
+          z_top
+        )
+      )
       if (is.null(particle)) return()
 
       # Bundle trajectory configuration metadata with trajectory informtation
@@ -318,10 +336,21 @@ simulation_step <- function(before_footprint = list(function() {output}),
                           file = file.path(rundir, 'ZIERR'))
       winderrtf <- (!is.null(xyerr)) + 2 * !is.null(zerr)
       if (winderrtf > 0) {
-        particle_error <- calc_trajectory(
-          merge_lists(namelist, list(winderrtf = winderrtf)), rundir, emisshrs,
-          hnf_plume, met_files, n_hours, output, rm_dat, timeout, w_option, 
-          z_top)
+        particle_error <- suppressMessages(
+          calc_trajectory(
+            merge_lists(namelist, list(winderrtf = winderrtf)),
+            rundir,
+            emisshrs,
+            hnf_plume,
+            met_files,
+            n_hours,
+            output,
+            rm_dat,
+            timeout,
+            w_option,
+            z_top
+          )
+        )
         if (is.null(particle_error)) return()
         output$particle_error <- particle_error
         output$particle_error_params <- list(siguverr = siguverr,
@@ -335,10 +364,16 @@ simulation_step <- function(before_footprint = list(function() {output}),
       }
 
       # Save output object to compressed rds file and symlink to out/particles
-      saveRDS(output, output$file)
+      save_traj_rds_enabled <- !identical(save_traj_rds, FALSE)
 
-      link <- file.path(output_wd, 'particles', basename(output$file))
-      suppressWarnings(file.symlink(output$file, link))
+      if (save_traj_rds_enabled) {
+        saveRDS(output, output$file)
+
+        link <- file.path(output_wd, 'particles', basename(output$file))
+        suppressWarnings(file.symlink(output$file, link))
+      } else {
+        message('simulation_step(): saveRDS(output) skipped (save_traj_rds=FALSE)')
+      }
 
     } else {
       # If user opted to recycle existing trajectory files, read in the recycled
@@ -367,6 +402,10 @@ simulation_step <- function(before_footprint = list(function() {output}),
     # outputs a .rds file, which can be read with readRDS() containing the
     # resultant footprint and various attributes
     foot_file <- file.path(rundir, paste0(simulation_id, '_foot.nc'))
+    if (file.exists(foot_file)) {
+      message(paste0('simulation_step(): using cached footprint: ', foot_file))
+      return(invisible(foot_file))
+    }
     # pdille: saving to variable 'foot' removed from below
     calc_footprint(output$particle, output = foot_file,
                            r_run_time = r_run_time,
@@ -394,4 +433,5 @@ simulation_step <- function(before_footprint = list(function() {output}),
 
     # return(foot)
   })
+
 }

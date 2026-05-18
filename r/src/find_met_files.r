@@ -16,6 +16,15 @@
 #' @export
 
 find_met_files <- function(t_start, met_file_format, n_hours, met_path) {
+  # Fast path: many runs pass a literal filename (no strftime tokens).
+  # In that case avoid directory scans/grep entirely.
+  if (!grepl('%', met_file_format, fixed = T)) {
+    candidate <- file.path(met_path, met_file_format)
+    if (file.exists(candidate)) {
+      return(normalizePath(candidate, mustWork = FALSE))
+    }
+  }
+
   require(dplyr)
   
   is_backward <- n_hours < 0

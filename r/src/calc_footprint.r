@@ -208,7 +208,9 @@ calc_footprint <- function(p, output = NULL, r_run_time,
     dplyr::filter(foot > 0,
                   long >= (xmn - xbufh*xres), long < (xmx + xbufh*xres),
                   lati >= (ymn - ybufh*yres), lati < (ymx + ybufh*yres))
-  if (nrow(p) == 0) return(NULL)
+  if (nrow(p) == 0) {
+    return(NULL)
+  }
 
   # Pre grid particle locations
   p <- p %>%
@@ -236,21 +238,15 @@ calc_footprint <- function(p, output = NULL, r_run_time,
 
   # Allocate and fill footprint output array
   foot <- array(grd, dim = c(dim(grd), nlayers))
-  for (i in 1:nlayers) {
+  for (i in seq_len(nlayers)) {
     .C("create_footprint", nrow=as.integer(ny), ncol=as.integer(nx))
-    layer_subset <- dplyr::filter(p, layer == layers[i])
 
-    rtimes <- unique(layer_subset$rtime)
+    # For each layer, split by rtime to use layer-specific kernel width
+    ptmp <- p %>% dplyr::filter(layer == layers[i])
+    for (step in split(ptmp, ptmp$rtime)) {
 
-    # Note that rtimes <- unique(layer_subset$rtime)
-    layer_subset$rtime <- factor(layer_subset$rtime, levels=rtimes)
-    by_rtime <- split(layer_subset, f = layer_subset$rtime)
-
-    for (j in 1:length(rtimes)) {
-      step <- by_rtime[[j]]
-
-      # step_w:  kernel size
-      step_w <- w[find_neighbor(rtimes[j], kernel$rtime)]
+      # step_w: kernel size
+      step_w <- w[find_neighbor(unique(step$rtime), kernel$rtime)]
 
       # Array dimensions
       len <- nrow(step)

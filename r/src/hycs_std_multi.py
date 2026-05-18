@@ -14,6 +14,21 @@ def log(message):
     print(message)
     sys.stdout.flush()
 
+def shard_message_tails(n_lines: int = 50) -> str:
+    chunks = []
+    for message_path in sorted(glob.glob("shard??/MESSAGE")):
+        try:
+            with open(message_path, "r", errors="replace") as f:
+                tail = f.readlines()[-n_lines:]
+        except Exception as e:
+            chunks.append(f"===== {message_path} (failed to read: {repr(e)}) =====")
+            continue
+
+        chunks.append(f"===== {message_path} (last {n_lines} lines) =====")
+        chunks.append("".join(tail).rstrip("\n"))
+
+    return "\n".join(chunks)
+
 # Perf tests 3/3/23:
 # 1 shard: 5.5 secs
 # 2 shards: 3.0 secs
@@ -55,7 +70,7 @@ class ThCall(threading.Thread):
         else:
             return self._output["success"]
 
-n_shards = 16
+n_shards = 26
 
 tmp_delete_dir = f"tmp_delete_{os.getpid()}_{threading.get_ident()}"
 os.mkdir(tmp_delete_dir)
@@ -65,7 +80,7 @@ for path in ["CONC.CFG", "WARNING", "VMSDIST", "PARTICLE_STILT.DAT", "PARTICLE.D
 
 ThCall(shutil.rmtree, tmp_delete_dir, ignore_errors=True)
 
-files_to_copy = [file for file in glob.glob("*") if not file.startswith("tmp_delete_")]
+files_to_link = [file for file in glob.glob("*") if not file.startswith("tmp_delete_")]
 
 setup_cfg = open("SETUP.CFG").read()
 maxpar = int(re.search(r"^MAXPAR=(\d+)", setup_cfg, re.MULTILINE).group(1))
@@ -84,8 +99,13 @@ def run_shard(shard_idx: int):
     before = time.monotonic()
     shard_name = f"shard{shard_idx:02d}"
     os.mkdir(shard_name)
-    for file_to_copy in files_to_copy:
-        shutil.copy(file_to_copy, shard_name)
+    for file_to_link in files_to_link:
+        source_path = os.path.join(os.getcwd(), file_to_link)
+        target_path = os.path.join(shard_name, file_to_link)
+        try:
+            os.symlink(source_path, target_path)
+        except OSError:
+            shutil.copy2(source_path, target_path)
     exe_path = os.path.join(os.getcwd(), shard_name, "hycs_std")
     try:
         result = subprocess.run("./hycs_std", cwd=shard_name, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -122,7 +142,24 @@ for shard_idx in range(n_shards):
     merge_cmdline.append(f"{shard_name}/PARTICLE_STILT.DAT")
     merge_cmdline.append(f"{shard_maxpar * shard_idx}")
 
-subprocess.check_output(merge_cmdline)
+try:
+    subprocess.check_output(merge_cmdline, stderr=subprocess.STDOUT)
+except subprocess.CalledProcessError as e:
+    output = e.output.decode("utf-8", errors="replace") if e.output else ""
+    shard_tails = shard_message_tails(50)
+    msg = f"merge_particle_stilt_files failed with status {e.returncode}. Output:\n{output}"
+    if shard_tails:
+        msg = f"{msg}\n\nShard MESSAGE tails:\n{shard_tails}"
+    log(msg)
+    raise RuntimeError(msg)
+
+if not os.path.exists("PARTICLE_STILT.DAT") or os.path.getsize("PARTICLE_STILT.DAT") == 0:
+    msg = "merge_particle_stilt_files completed but PARTICLE_STILT.DAT was not created or is empty"
+    shard_tails = shard_message_tails(50)
+    if shard_tails:
+        msg = f"{msg}\n\nShard MESSAGE tails:\n{shard_tails}"
+    log(msg)
+    raise RuntimeError(msg)
 
 duration = time.monotonic() - before
 

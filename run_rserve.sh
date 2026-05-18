@@ -1,3 +1,4 @@
 #!/bin/bash
 
-R CMD Rserve --RS-conf Rserve.conf >> rserve.log 2>&1
+cd /usr/local/stilt
+/usr/bin/R CMD Rserve --vanilla --RS-conf Rserve.conf >> rserve.log 2>&1

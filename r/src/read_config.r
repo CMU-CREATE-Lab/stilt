@@ -9,14 +9,13 @@
 
 read_config <- function(file) {
 
-  n_lines <- count_lines(file)
-
-  if (n_lines < 2) {
+  lines <- readLines(file)
+  if (length(lines) < 2) {
     warning(paste('read_config(): only 1 line found in', file))
     return(NULL)
   }
 
-  config <- grep('=', readLines(file), fixed = T, value = T)
+  config <- grep('=', lines, fixed = T, value = T)
   config_min <- strsplit(gsub('\\s+|\'|,', '', config), '=')
 
   config_list <- list()

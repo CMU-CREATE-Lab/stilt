@@ -65,9 +65,10 @@ calc_trajectory <- function(namelist,
   ## Perf Note: Takes ~115ms
   # Read particle file, optionally remove PARTICLE.DAT in favor of compressed
   # .rds file, and return particle data frame
-  p <- read_particle(file = pf, varsiwant = namelist[['varsiwant']])
+  p <- read_particle(file = pf, varsiwant = namelist[['varsiwant']], n_lines = n_lines)
+
   if (rm_dat) {
-    system(paste('rm', '-f', file.path(rundir, 'PARTICLE.DAT')))
+    file.remove(file.path(rundir, 'PARTICLE.DAT'))
   }
 
   numpar <- max(p$indx)
@@ -87,8 +88,9 @@ calc_trajectory <- function(namelist,
   # Calculate near-field dilution height based on gaussian plume width
   # approximation and recalculate footprint sensitivity for cases when the
   # plume height is less than the PBL height scaled by veght
-  if (hnf_plume)
+  if (hnf_plume) {
     p <- calc_plume_dilution(p, numpar, output$receptor$zagl, namelist[['veght']])
+  }
 
   p
 }

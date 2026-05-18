@@ -174,6 +174,7 @@ do_run <- function(arg_list) {
         rht = as.numeric(args$rht),
         rm_dat = as.logical(args$rm_dat),
         run_foot = as.logical(args$run_foot),
+        save_traj_rds = if (is.null(args$save_traj_rds)) TRUE else as.logical(args$save_traj_rds),
         run_trajec = as.logical(args$run_trajec),
         siguverr = as.numeric(args$siguverr),
         sigzierr = as.numeric(args$sigzierr),
@@ -213,7 +214,9 @@ do_run <- function(arg_list) {
         zcoruverr = as.numeric(args$zcoruverr)
     )
     stilt_args <- stilt_args[sapply(stilt_args, function(x) length(x) > 0)]
-    message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; calling simulation_step.r")
+    if (!is.null(stilt_args$save_traj_rds) && is.na(stilt_args$save_traj_rds)) {
+        stilt_args$save_traj_rds <- TRUE
+    }
     result <- do.call(simulation_step, stilt_args)
-    message(format(Sys.time(), "%H:%M.%OS6"), "  stilt_clir.r; Finished simulation_step.r")
+    return(result)
 }

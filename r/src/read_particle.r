@@ -9,18 +9,23 @@
 #' @import dplyr
 #' @export
 
-read_particle <- function(file, varsiwant) {
+read_particle <- function(file, varsiwant, n_lines = NULL) {
 
   #require(dplyr)
 
-  n_lines <- count_lines(file)
+  if (is.null(n_lines)) {
+    n_lines <- count_lines(file)
+  }
 
   if (n_lines < 2) {
     warning(paste('read_particle(): only 1 line found in', file))
     return(NULL)
   }
 
+  n_rows <- as.integer(n_lines - 1)
+
   read.table(file, header = F, skip = 1,
              colClasses = 'numeric', col.names = varsiwant,
-             stringsAsFactors = F)
+             stringsAsFactors = F,
+             nrows = n_rows)
 }

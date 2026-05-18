@@ -69,13 +69,16 @@ write_footprint <- function(foot, output, glong, glati, projection, time_out,
   }
   
   
-  # Save footprint fo file
-  if (!is.null(output) && file.exists(output))
-    system(paste('rm', output))
-
   # netCDF output
   if (!is.null(output) && grepl('\\.nc$', output, ignore.case = T) &&
       'ncdf4' %in% names(sessionInfo()$otherPkgs)) {
+
+    output_tmp <- tempfile(
+      pattern = paste0('.', basename(output), '.'),
+      tmpdir = dirname(output),
+      fileext = '.tmp'
+    )
+    on.exit(unlink(output_tmp), add = TRUE)
     
     # xy dimensions in lat/lon or alternative projection
     if (is_longlat) {
@@ -94,13 +97,13 @@ write_footprint <- function(foot, output, glong, glati, projection, time_out,
     
     # Projection specific xy definitions
     if (is_longlat) {
-      nc <- nc_create(output, list(fvar), force_v4 = T)
+      nc <- nc_create(output_tmp, list(fvar), force_v4 = T)
       ncatt_put(nc, 'lon', 'standard_name', 'longitude')
       ncatt_put(nc, 'lon', 'long_name', 'longitude at cell center')
       ncatt_put(nc, 'lat', 'standard_name', 'latitude')
       ncatt_put(nc, 'lat', 'long_name', 'latitude at cell center')
     } else {
-      nc <- nc_create(output, list(fvar, pvar), force_v4 = T)
+      nc <- nc_create(output_tmp, list(fvar, pvar), force_v4 = T)
       ncatt_put(nc, 'x', 'standard_name', 'projection_x_coordinate')
       ncatt_put(nc, 'x', 'long_name', 'x coordinate of projection')
       ncatt_put(nc, 'y', 'standard_name', 'projection_y_coordinate')
@@ -129,6 +132,10 @@ write_footprint <- function(foot, output, glong, glati, projection, time_out,
     ncatt_put(nc, 0, 'time_created', format(Sys.time(), tz = 'UTC'))
     
     nc_close(nc)
+    renamed <- file.rename(output_tmp, output)
+    if (!renamed) {
+      stop(paste('write_footprint(): failed to atomically rename', output_tmp, 'to', output))
+    }
     return(output)
   }
   
